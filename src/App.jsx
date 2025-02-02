@@ -35,12 +35,12 @@ export default function App() {
   const choices = ["Rock", "Paper", "Scissors"];
 
   // 验证房间代码
-  function validateRoomCode(code) {
+  const validateRoomCode = (code) => {
     return code.length === 4;
-  }
+  };
 
   // 🕹 创建房间
-  async function handleLogin() {
+  const handleLogin = async () => {
     try {
       if (!name) {
         setError("Please enter your name");
@@ -66,10 +66,10 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   // 🕹 加入房间
-  async function handleJoinRoom() {
+  const handleJoinRoom = async () => {
     try {
       if (!name) {
         setError("Please enter your name");
@@ -101,7 +101,61 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  // 🕹 选择剪刀石头布
+  const handleChoiceSelection = (selectedChoice) => {
+    setChoice(selectedChoice);
+  };
+
+  // 🕹 确认选择 & 等待对手
+  const handleConfirm = () => {
+    const playerKey = isPlayerA ? "playerA" : "playerB";
+    const playerData = {
+      choice,
+      message,
+      submittedAt: new Date().toISOString()
+    };
+    
+    update(ref(db, `rooms/${roomCode}/${playerKey}`), playerData);
+  };
+
+  // 🎮 获取游戏结果
+  const getResult = () => {
+    if (!opponentChoice) return "Waiting...";
+    if (choice === opponentChoice) return "It's a tie!";
+    if (
+      (choice === "Rock" && opponentChoice === "Scissors") ||
+      (choice === "Paper" && opponentChoice === "Rock") ||
+      (choice === "Scissors" && opponentChoice === "Paper")
+    ) {
+      return "You Win!";
+    }
+    return "You Lose!";
+  };
+
+  // 🎉 显示获胜者的留言
+  const getWinnerMessage = () => {
+    if (getResult() === "You Win!") return message;
+    if (getResult() === "You Lose!") return opponentMessage;
+    return "";
+  };
+
+  // 🔄 重置游戏
+  const resetGame = () => {
+    setStep("login");
+    setName("");
+    setRoomCode("");
+    setChoice("");
+    setMessage("");
+    setOpponentChoice(null);
+    setOpponentMessage("");
+    setCountdown(3);
+    setShowResult(false);
+    setResultStep(0);
+    setIsPlayerA(false);
+    setError("");
+  };
 
   // 🔄 监听对手加入
   useEffect(() => {
@@ -118,24 +172,7 @@ export default function App() {
     }
   }, [step, roomCode]);
 
-  // 🕹 选择剪刀石头布
-  function handleChoiceSelection(choice) {
-    setChoice(choice);
-  }
-
-  // 🕹 确认选择 & 等待对手
-  function handleConfirm() {
-    const playerKey = isPlayerA ? "playerA" : "playerB";
-    const playerData = {
-      choice,
-      message,
-      submittedAt: new Date().toISOString()
-    };
-    
-    update(ref(db, `rooms/${roomCode}/${playerKey}`), playerData);
-  }
-
-  // 监听对手选择
+  // 👀 监听对手选择
   useEffect(() => {
     if (step === "game") {
       const opponentKey = isPlayerA ? "playerB" : "playerA";
@@ -154,7 +191,7 @@ export default function App() {
     }
   }, [step, roomCode, isPlayerA]);
 
-  // ⏳ 倒计时
+  // ⏳ 倒计时效果
   useEffect(() => {
     if (step === "result" && countdown > 0) {
       const timer = setTimeout(() => {
@@ -167,7 +204,7 @@ export default function App() {
     }
   }, [step, countdown]);
 
-  // 清理房间数据
+  // 🧹 清理房间数据
   useEffect(() => {
     if (step === "result" && showResult) {
       const cleanup = setTimeout(() => {
@@ -178,54 +215,15 @@ export default function App() {
     }
   }, [step, showResult, roomCode]);
 
-  // 🕹 结果计算
-  function getResult() {
-    if (!opponentChoice) return "Waiting...";
-    if (choice === opponentChoice) return "It's a tie!";
-    if (
-      (choice === "Rock" && opponentChoice === "Scissors") ||
-      (choice === "Paper" && opponentChoice === "Rock") ||
-      (choice === "Scissors" && opponentChoice === "Paper")
-    ) {
-      return "You Win!";
-    }
-    return "You Lose!";
-  }
-
-  // 🎉 显示获胜者的留言
-  function getWinnerMessage() {
-    if (getResult() === "You Win!") return message;
-    if (getResult() === "You Lose!") return opponentMessage;
-    return "";
-  }
-
-  // 重置游戏
-  function resetGame() {
-    setStep("login");
-    setName("");
-    setRoomCode("");
-    setChoice("");
-    setMessage("");
-    setOpponentChoice(null);
-    setOpponentMessage("");
-    setCountdown(3);
-    setShowResult(false);
-    setResultStep(0);
-    setIsPlayerA(false);
-    setError("");
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
       <div className="max-w-md mx-auto w-full flex flex-col justify-center items-center">
-        {/* 错误提示 */}
         {error && (
           <div className="bg-red-500 text-white p-2 rounded mb-4 w-full text-center">
             {error}
           </div>
         )}
         
-        {/* 登录页面 */}
         {step === "login" && (
           <div className="text-center w-full">
             <h1 className="text-2xl font-bold mb-4">Enter Game Room</h1>
@@ -242,7 +240,7 @@ export default function App() {
               placeholder="Room Code (4 characters)"
               className="p-2 rounded text-black mb-2 block w-full"
               value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value)}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
               maxLength={4}
               disabled={loading}
             />
@@ -263,7 +261,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 等待对手 */}
         {step === "waiting" && (
           <div className="text-center">
             <h1 className="text-2xl font-bold">Waiting for opponent...</h1>
@@ -271,7 +268,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 选择剪刀石头布 */}
         {step === "game" && (
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
@@ -303,7 +299,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 结果 */}
         {step === "result" && (
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">
