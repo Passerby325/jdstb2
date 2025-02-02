@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
+import { getDatabase, ref, set, update, onValue, remove } from "firebase/database";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, update, onValue, get, remove } from "firebase/database";
 
 // 🔥 Firebase 配置
 const firebaseConfig = {
@@ -30,6 +30,7 @@ export default function App() {
   const [resultStep, setResultStep] = useState(0);
 
   const choices = ["Rock", "Paper", "Scissors"];
+  const isPlayerA = step === "waiting";
 
   // 🕹 创建房间
   function handleLogin() {
@@ -70,23 +71,23 @@ export default function App() {
   }
 
   // 🕹 确认选择 & 等待对手
-function handleConfirm() {
-  const playerKey = isPlayerA ? "playerA" : "playerB"; // 确定当前玩家
-  update(ref(db, `rooms/${roomCode}/${playerKey}`), { choice, message });
+  function handleConfirm() {
+    const playerKey = isPlayerA ? "playerA" : "playerB"; // 确定当前玩家
+    update(ref(db, `rooms/${roomCode}/${playerKey}`), { choice, message });
 
-  // ✅ 监听对手的数据，等待其提交
-  const opponentKey = isPlayerA ? "playerB" : "playerA";
-  const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
+    // ✅ 监听对手的数据，等待其提交
+    const opponentKey = isPlayerA ? "playerB" : "playerA";
+    const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
 
-  onValue(opponentRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data?.choice) {
-      setOpponentChoice(data.choice);
-      setOpponentMessage(data.message || ""); // 避免 message 为空时报错
-      setStep("result");
-    }
-  });
-}
+    onValue(opponentRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data?.choice) {
+        setOpponentChoice(data.choice);
+        setOpponentMessage(data.message || ""); // 避免 message 为空时报错
+        setStep("result");
+      }
+    });
+  }
 
   // 🕹 结果计算
   function getResult() {
@@ -110,24 +111,21 @@ function handleConfirm() {
   }
 
   // ⏳ 倒计时
-
+  useEffect(() => {
+    if (step === "result" && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (countdown === 0) {
+      setShowResult(true);
+    }
+  }, [step, countdown]);
 
   useEffect(() => {
-  if (step === "game") {
-    const opponentKey = isPlayerA ? "playerB" : "playerA";
-    const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
-
-    onValue(opponentRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data?.choice) {
-        setOpponentChoice(data.choice);
-        setOpponentMessage(data.message || "");
-        setStep("result");
-      }
-    });
-  }
-}, [step, roomCode, isPlayerA]);
-
+    if (showResult && resultStep < 5) {
+      const timer = setTimeout(() => setResultStep(resultStep + 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showResult, resultStep]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
@@ -193,14 +191,18 @@ function handleConfirm() {
         {/* 结果 */}
         {step === "result" && (
           <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Revealing in {countdown}...</h1>
-            {showResult && (
-              <>
-                <p>You chose: {choice}</p>
-                <p>Opponent chose: {opponentChoice}</p>
-                <p className="mt-4 font-bold">{getResult()}</p>
-                <p className="italic mt-2">"{getWinnerMessage()}"</p>
-              </>
+            {countdown > 0 ? (
+              <h1 className="text-2xl font-bold mb-4">Revealing in {countdown}...</h1>
+            ) : (
+              showResult && (
+                <>
+                  {resultStep > 0 && <h1 className="text-2xl font-bold mb-4 animate-shake">Results</h1>}
+                  {resultStep > 1 && <p className="animate-shake">You chose: {choice}</p>}
+                  {resultStep > 2 && <p className="animate-shake">Opponent chose: {opponentChoice}</p>}
+                  {resultStep > 3 && <p className="mt-4 font-bold animate-shake">{getResult()}</p>}
+                  {resultStep > 4 && <p className="italic mt-2 animate-shake">"{getWinnerMessage()}"</p>}
+                </>
+              )
             )}
           </div>
         )}
