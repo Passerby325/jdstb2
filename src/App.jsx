@@ -30,13 +30,15 @@ export default function App() {
   const [choice, setChoice] = useState("");
   const [message, setMessage] = useState("");
   const [hasConfirmed, setHasConfirmed] = useState(false);
+  const [opponentName, setOpponentName] = useState("");
   const [opponentChoice, setOpponentChoice] = useState(null);
   const [opponentMessage, setOpponentMessage] = useState("");
   const [opponentConfirmed, setOpponentConfirmed] = useState(false);
 
   // 倒计时和结果相关状态
-  const [gameCountdown, setGameCountdown] = useState(10);
+  const [gameCountdown, setGameCountdown] = useState(30); // 30秒选择时间
   const [resultCountdown, setResultCountdown] = useState(3);
+  const [resultStep, setResultStep] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
 
@@ -63,7 +65,7 @@ export default function App() {
       setError("");
       
       const roomRef = ref(db, `rooms/${roomCode}`);
-      await remove(roomRef); // 清除旧房间数据
+      await remove(roomRef);
       await update(roomRef, {
         playerA: name,
         createdAt: new Date().toISOString(),
@@ -102,6 +104,12 @@ export default function App() {
         return;
       }
 
+      const roomData = snapshot.val();
+      if (roomData.status !== "waiting") {
+        setError("Room is no longer available");
+        return;
+      }
+
       await update(roomRef, {
         playerB: name,
         joinedAt: new Date().toISOString(),
@@ -109,8 +117,9 @@ export default function App() {
       });
 
       setIsPlayerA(false);
+      setOpponentName(roomData.playerA);
       setStep("game");
-      setGameCountdown(10); // 设置游戏倒计时
+      setGameCountdown(30);
     } catch (err) {
       setError("Failed to join room: " + err.message);
     } finally {
@@ -118,7 +127,7 @@ export default function App() {
     }
   };
 
-  // 🎮 选择动作
+// 🎮 选择动作
   const handleChoiceSelection = (selectedChoice) => {
     if (!hasConfirmed) {
       setChoice(selectedChoice);
@@ -159,13 +168,6 @@ export default function App() {
     return "You Lose!";
   };
 
-  // 🎮 获取胜利消息
-  const getWinnerMessage = () => {
-    if (getResult() === "You Win!") return message;
-    if (getResult() === "You Lose!") return opponentMessage;
-    return "";
-  };
-
   // 🔄 重置游戏
   const resetGame = async () => {
     try {
@@ -182,45 +184,38 @@ export default function App() {
     setChoice("");
     setMessage("");
     setHasConfirmed(false);
+    setOpponentName("");
     setOpponentChoice(null);
     setOpponentMessage("");
     setOpponentConfirmed(false);
-    setGameCountdown(10);
+    setGameCountdown(30);
     setResultCountdown(3);
+    setResultStep(0);
     setShowResult(false);
     setGameStarted(false);
     setIsPlayerA(false);
     setError("");
   };
 
-  // 👀 监听房间状态
+  // 👀 监听房间状态和对手
   useEffect(() => {
-    if (step === "waiting") {
+    if (step === "waiting" || step === "game") {
       const roomRef = ref(db, `rooms/${roomCode}`);
       const unsubscribe = onValue(roomRef, (snapshot) => {
         const data = snapshot.val();
-        if (data?.status === "playing") {
+        if (!data) return;
+
+        if (step === "waiting" && data.status === "playing") {
+          setOpponentName(data.playerB);
           setStep("game");
-          setGameCountdown(10);
+          setGameCountdown(30);
         }
-      });
 
-      return () => unsubscribe();
-    }
-  }, [step, roomCode]);
-
-  // 👀 监听对手状态
-  useEffect(() => {
-    if (step === "game") {
-      const opponentKey = isPlayerA ? "playerB" : "playerA";
-      const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
-
-      const unsubscribe = onValue(opponentRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data?.confirmed) {
+        const opponentKey = isPlayerA ? "playerB" : "playerA";
+        if (data[opponentKey]?.confirmed) {
           setOpponentConfirmed(true);
-          setOpponentChoice(data.choice);
-          setOpponentMessage(data.message || "");
+          setOpponentChoice(data[opponentKey].choice);
+          setOpponentMessage(data[opponentKey].message || "");
         }
       });
 
@@ -255,22 +250,31 @@ export default function App() {
     }
   }, [hasConfirmed, opponentConfirmed, gameCountdown, step]);
 
-  // ⏳ 结果显示倒计时
+  // ⏳ 结果显示动画
   useEffect(() => {
     let timer;
-    if (step === "result" && resultCountdown > 0) {
-      timer = setInterval(() => {
-        setResultCountdown((prev) => {
-          if (prev <= 1) {
-            setShowResult(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (step === "result") {
+      if (resultCountdown > 0) {
+        timer = setInterval(() => {
+          setResultCountdown(prev => {
+            if (prev <= 1) {
+              setResultStep(1);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else if (resultStep > 0 && resultStep < 4) {
+        timer = setTimeout(() => {
+          setResultStep(prev => prev + 1);
+        }, 1000);
+      }
     }
-    return () => clearInterval(timer);
-  }, [step, resultCountdown]);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(timer);
+    };
+  }, [step, resultCountdown, resultStep]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
@@ -328,6 +332,7 @@ export default function App() {
         {step === "game" && (
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
+            <p className="text-lg mb-2">Your opponent: {opponentName}</p>
             {!gameStarted && (
               <div className="mb-4 text-yellow-400">
                 Time remaining: {gameCountdown} seconds
@@ -379,24 +384,58 @@ export default function App() {
 
         {step === "result" && (
           <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">
-              {!showResult ? `Revealing in ${resultCountdown}...` : 'Game Result'}
-            </h1>
-            {showResult && (
-              <>
-                <p>You chose: {choice}</p>
-                <p>Opponent chose: {opponentChoice}</p>
-                <p className="mt-4 font-bold text-xl">{getResult()}</p>
-                {getWinnerMessage() && (
-                  <p className="italic mt-2">"{getWinnerMessage()}"</p>
+            {resultCountdown > 0 ? (
+              <h1 className="text-2xl font-bold mb-4">
+                Revealing in {resultCountdown}...
+              </h1>
+            ) : (
+              <div className="space-y-4">
+                {resultStep >= 1 && (
+                  <div className="transition-opacity duration-500">
+                    <p>You chose: {choice}</p>
+                    {message && (
+                      <p className="text-sm text-gray-400">
+                        Your message: "{message}"
+                      </p>
+                    )}
+                  </div>
                 )}
-                <button 
-                  onClick={resetGame}
-                  className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
-                >
-                  Play Again
-                </button>
-              </>
+                
+                {resultStep >= 2 && (
+                  <div className="transition-opacity duration-500">
+                    <p>{opponentName} chose: {opponentChoice}</p>
+                    {opponentMessage && (
+                      <p className="text-sm text-gray-400">
+                        {opponentName}'s message: "{opponentMessage}"
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {resultStep >= 3 && (
+                  <div className="transition-opacity duration-500">
+                    <p className="text-xl font-bold mt-4">{getResult()}</p>
+                    {(message || opponentMessage) && (
+                      <p className="italic mt-2">
+                        Winner's message: "
+                        {getResult() === "You Win!" ? message : opponentMessage}"
+                        <span className="text-sm text-gray-400 ml-2">
+                          - {getResult() === "You Win!" ? name : opponentName}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {resultStep >= 4 && (
+                  <button 
+                    onClick={resetGame}
+                    className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
+                  >
+                    Play Again
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
