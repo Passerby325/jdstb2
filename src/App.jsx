@@ -284,7 +284,7 @@ export default function App() {
   }, [step, resultCountdown, resultStep]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+   <div className="center-container bg-gray-900 text-white">
       <div className="w-full max-w-md mx-auto p-6">
         <div className="w-full flex flex-col items-center justify-center text-center">
           {error && (
