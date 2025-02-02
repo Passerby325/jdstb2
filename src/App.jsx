@@ -70,23 +70,23 @@ export default function App() {
   }
 
   // 🕹 确认选择 & 等待对手
-  function handleConfirm() {
-    const playerRef = ref(db, `rooms/${roomCode}/${name}`);
-    update(playerRef, { choice, message });
+function handleConfirm() {
+  const playerKey = isPlayerA ? "playerA" : "playerB"; // 确定当前玩家
+  update(ref(db, `rooms/${roomCode}/${playerKey}`), { choice, message });
 
-    // 获取对手数据
-    const roomRef = ref(db, `rooms/${roomCode}`);
-    get(roomRef).then((snapshot) => {
-      const data = snapshot.val();
-      const opponent = data?.playerA === name ? "playerB" : "playerA";
+  // ✅ 监听对手的数据，等待其提交
+  const opponentKey = isPlayerA ? "playerB" : "playerA";
+  const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
 
-      if (data && data[opponent]?.choice) {
-        setOpponentChoice(data[opponent].choice);
-        setOpponentMessage(data[opponent].message);
-        setStep("result");
-      }
-    });
-  }
+  onValue(opponentRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data?.choice) {
+      setOpponentChoice(data.choice);
+      setOpponentMessage(data.message || ""); // 避免 message 为空时报错
+      setStep("result");
+    }
+  });
+}
 
   // 🕹 结果计算
   function getResult() {
@@ -110,14 +110,24 @@ export default function App() {
   }
 
   // ⏳ 倒计时
+
+
   useEffect(() => {
-    if (step === "result" && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (countdown === 0) {
-      setShowResult(true);
-    }
-  }, [step, countdown]);
+  if (step === "game") {
+    const opponentKey = isPlayerA ? "playerB" : "playerA";
+    const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
+
+    onValue(opponentRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data?.choice) {
+        setOpponentChoice(data.choice);
+        setOpponentMessage(data.message || "");
+        setStep("result");
+      }
+    });
+  }
+}, [step, roomCode, isPlayerA]);
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
