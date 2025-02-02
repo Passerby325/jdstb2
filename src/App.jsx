@@ -65,7 +65,7 @@ export default function App() {
       setError("");
       
       const roomRef = ref(db, `rooms/${roomCode}`);
-      await remove(roomRef);
+      await remove(roomRef); // 清除旧房间数据
       await update(roomRef, {
         playerA: name,
         createdAt: new Date().toISOString(),
@@ -174,11 +174,11 @@ export default function App() {
     return "You Lose!";
   };
 
-  // 🔄 重置游戏
+  // 🔄 重置游戏并清除房间数据
   const resetGame = async () => {
     try {
       if (roomCode) {
-        await remove(ref(db, `rooms/${roomCode}`));
+        await remove(ref(db, `rooms/${roomCode}`)); // 清除房间数据
       }
     } catch (err) {
       console.error("Failed to cleanup room:", err);
@@ -253,7 +253,7 @@ export default function App() {
     if (step === "game" && (hasConfirmed && opponentConfirmed || gameCountdown === 0)) {
       setGameStarted(true);
       setStep("result");
-      setResultStep(0); // 重置结果步骤
+      setResultStep(0);
     }
   }, [hasConfirmed, opponentConfirmed, gameCountdown, step]);
 
@@ -284,155 +284,157 @@ export default function App() {
   }, [step, resultCountdown, resultStep]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
-      <div className="max-w-md mx-auto w-full flex flex-col justify-center items-center">
-        {error && (
-          <div className="bg-red-500 text-white p-2 rounded mb-4 w-full text-center">
-            {error}
-          </div>
-        )}
-
-        {step === "login" && (
-          <div className="text-center w-full">
-            <h1 className="text-2xl font-bold mb-4">Enter Game Room</h1>
-            <input
-              type="text"
-              placeholder="Your Name"
-              className="p-2 rounded text-black mb-2 block w-full"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={loading}
-            />
-            <input
-              type="text"
-              placeholder="Room Code (4 characters)"
-              className="p-2 rounded text-black mb-2 block w-full"
-              value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-              maxLength={4}
-              disabled={loading}
-            />
-            <button 
-              onClick={handleCreateRoom}
-              className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
-              disabled={loading}
-            >
-              {loading ? 'Creating...' : 'Create Room'}
-            </button>
-            <button 
-              onClick={handleJoinRoom}
-              className={`bg-green-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
-              disabled={loading}
-            >
-              {loading ? 'Joining...' : 'Join Room'}
-            </button>
-          </div>
-        )}
-
-        {step === "waiting" && (
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">Waiting for opponent...</h1>
-            <p className="mt-4">Room Code: {roomCode}</p>
-          </div>
-        )}
-
-        {step === "game" && (
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
-            <p className="text-lg mb-2">Your opponent: {opponentName}</p>
-            {!gameStarted && (
-              <div className="mb-4 text-yellow-400">
-                Time remaining: {gameCountdown} seconds
-              </div>
-            )}
-            <div className="flex justify-center gap-4 mb-4">
-              {choices.map((c) => (
-                <button
-                  key={c}
-                  className={`px-4 py-2 rounded ${
-                    choice === c ? 'bg-green-500' : 'bg-gray-700'
-                  } ${hasConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  onClick={() => handleChoiceSelection(c)}
-                  disabled={hasConfirmed}
-                >
-                  {c}
-                </button>
-              ))}
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+      <div className="w-full max-w-md mx-auto p-6">
+        <div className="w-full flex flex-col items-center justify-center text-center">
+          {error && (
+            <div className="bg-red-500 text-white p-2 rounded mb-4 w-full max-w-sm">
+              {error}
             </div>
-            <input
-              type="text"
-              placeholder="Message to opponent"
-              className="p-2 rounded text-black mt-4 block w-full"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              disabled={hasConfirmed}
-            />
-            <button 
-              onClick={handleConfirm}
-              disabled={!choice || hasConfirmed}
-              className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full 
-                ${(!choice || hasConfirmed) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {hasConfirmed ? 'Waiting for opponent...' : 'Confirm'}
-            </button>
-            
-            {hasConfirmed && !opponentConfirmed && (
-              <p className="mt-2 text-yellow-400">
-                Waiting for opponent to confirm...
-              </p>
-            )}
-            {opponentConfirmed && !hasConfirmed && (
-              <p className="mt-2 text-yellow-400">
-                Opponent has made their choice!
-              </p>
-            )}
-          </div>
-        )}
+          )}
 
-        {step === "result" && (
-          <div className="text-center">
-            {resultCountdown > 0 ? (
-              <h1 className="text-2xl font-bold mb-4">
-                Revealing in {resultCountdown}...
-              </h1>
-            ) : (
-              <div className={`space-y-4 ${isShaking ? 'animate-shake' : ''}`}>
-                {resultStep >= 1 && (
-                  <p className="transition-opacity duration-500">
-                    You chose: {choice}
-                  </p>
-                )}
-                
-                {resultStep >= 2 && (
-                  <p className="transition-opacity duration-500">
-                    {opponentName} chose: {opponentChoice}
-                  </p>
-                )}
-                
-                {resultStep >= 3 && (
-                  <p className="text-xl font-bold transition-opacity duration-500">
-                    {getResult()}
-                  </p>
-                )}
-                
-                {resultStep >= 4 && opponentMessage && (
-                  <p className="italic transition-opacity duration-500">
-                    "{opponentMessage}" - {opponentName}
-                  </p>
-                )}
+          {step === "login" && (
+            <div className="w-full max-w-sm">
+              <h1 className="text-2xl font-bold mb-4">Enter Game Room</h1>
+              <input
+                type="text"
+                placeholder="Your Name"
+                className="p-2 rounded text-black mb-2 block w-full"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={loading}
+              />
+              <input
+                type="text"
+                placeholder="Room Code (4 characters)"
+                className="p-2 rounded text-black mb-2 block w-full"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                maxLength={4}
+                disabled={loading}
+              />
+              <button 
+                onClick={handleCreateRoom}
+                className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+                disabled={loading}
+              >
+                {loading ? 'Creating...' : 'Create Room'}
+              </button>
+              <button 
+                onClick={handleJoinRoom}
+                className={`bg-green-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+                disabled={loading}
+              >
+                {loading ? 'Joining...' : 'Join Room'}
+              </button>
+            </div>
+          )}
 
-                {resultStep >= 4 && (
-                  <button 
-                    onClick={resetGame}
-                    className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
+          {step === "waiting" && (
+            <div className="w-full max-w-sm">
+              <h1 className="text-2xl font-bold">Waiting for opponent...</h1>
+              <p className="mt-4">Room Code: {roomCode}</p>
+            </div>
+          )}
+
+          {step === "game" && (
+            <div className="w-full max-w-sm">
+              <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
+              <p className="text-lg mb-2">Your opponent: {opponentName}</p>
+              {!gameStarted && (
+                <div className="mb-4 text-yellow-400">
+                  Time remaining: {gameCountdown} seconds
+                </div>
+              )}
+              <div className="flex justify-center gap-4 mb-4">
+                {choices.map((c) => (
+                  <button
+                    key={c}
+                    className={`px-4 py-2 rounded ${
+                      choice === c ? 'bg-green-500' : 'bg-gray-700'
+                    } ${hasConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => handleChoiceSelection(c)}
+                    disabled={hasConfirmed}
                   >
-                    Play Again
+                    {c}
                   </button>
-                )}
+                ))}
               </div>
-            )}
-          </div>
-        )}
+              <input
+                type="text"
+                placeholder="Message to opponent"
+                className="p-2 rounded text-black mt-4 block w-full"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={hasConfirmed}
+              />
+              <button 
+                onClick={handleConfirm}
+                disabled={!choice || hasConfirmed}
+                className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full 
+                  ${(!choice || hasConfirmed) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {hasConfirmed ? 'Waiting for opponent...' : 'Confirm'}
+              </button>
+              
+              {hasConfirmed && !opponentConfirmed && (
+                <p className="mt-2 text-yellow-400">
+                  Waiting for opponent to confirm...
+                </p>
+              )}
+              {opponentConfirmed && !hasConfirmed && (
+                <p className="mt-2 text-yellow-400">
+                  Opponent has made their choice!
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === "result" && (
+            <div className="w-full max-w-sm">
+              {resultCountdown > 0 ? (
+                <h1 className="text-2xl font-bold mb-4">
+                  Revealing in {resultCountdown}...
+                </h1>
+              ) : (
+                <div className={`space-y-4 ${isShaking ? 'animate-shake' : ''}`}>
+                  {resultStep >= 1 && (
+                    <p className="transition-opacity duration-500">
+                      You chose: {choice}
+                    </p>
+                  )}
+                  
+                  {resultStep >= 2 && (
+                    <p className="transition-opacity duration-500">
+                      {opponentName} chose: {opponentChoice}
+                    </p>
+                  )}
+                  
+                  {resultStep >= 3 && (
+                    <p className="text-xl font-bold transition-opacity duration-500">
+                      {getResult()}
+                    </p>
+                  )}
+                  
+                  {resultStep >= 4 && opponentMessage && (
+                    <p className="italic transition-opacity duration-500">
+                      "{opponentMessage}" - {opponentName}
+                    </p>
+                  )}
+
+                  {resultStep >= 4 && (
+                    <button 
+                      onClick={resetGame}
+                      className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
+                    >
+                      Play Again
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
