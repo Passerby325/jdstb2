@@ -36,10 +36,10 @@ export default function App() {
   const [opponentConfirmed, setOpponentConfirmed] = useState(false);
 
   // 倒计时和结果相关状态
-  const [gameCountdown, setGameCountdown] = useState(30); // 30秒选择时间
+  const [gameCountdown, setGameCountdown] = useState(30);
   const [resultCountdown, setResultCountdown] = useState(3);
   const [resultStep, setResultStep] = useState(0);
-  const [showResult, setShowResult] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
 
   const choices = ["Rock", "Paper", "Scissors"];
@@ -127,6 +127,12 @@ export default function App() {
     }
   };
 
+  // 震动动画效果
+  const startShaking = () => {
+    setIsShaking(true);
+    setTimeout(() => setIsShaking(false), 500); // 0.5秒后停止震动
+  };
+
 // 🎮 选择动作
   const handleChoiceSelection = (selectedChoice) => {
     if (!hasConfirmed) {
@@ -191,7 +197,7 @@ export default function App() {
     setGameCountdown(30);
     setResultCountdown(3);
     setResultStep(0);
-    setShowResult(false);
+    setIsShaking(false);
     setGameStarted(false);
     setIsPlayerA(false);
     setError("");
@@ -247,26 +253,27 @@ export default function App() {
     if (step === "game" && (hasConfirmed && opponentConfirmed || gameCountdown === 0)) {
       setGameStarted(true);
       setStep("result");
+      setResultStep(0); // 重置结果步骤
     }
   }, [hasConfirmed, opponentConfirmed, gameCountdown, step]);
 
-  // ⏳ 结果显示动画
+  // ⏳ 结果逐步显示效果
   useEffect(() => {
     let timer;
     if (step === "result") {
       if (resultCountdown > 0) {
         timer = setInterval(() => {
-          setResultCountdown(prev => {
-            if (prev <= 1) {
-              setResultStep(1);
-              return 0;
-            }
-            return prev - 1;
-          });
+          setResultCountdown(prev => prev - 1);
         }, 1000);
-      } else if (resultStep > 0 && resultStep < 4) {
+      } else if (resultStep < 4) {
         timer = setTimeout(() => {
-          setResultStep(prev => prev + 1);
+          setResultStep(prev => {
+            if (prev < 4) {
+              startShaking(); // 添加震动效果
+              return prev + 1;
+            }
+            return prev;
+          });
         }, 1000);
       }
     }
@@ -389,44 +396,31 @@ export default function App() {
                 Revealing in {resultCountdown}...
               </h1>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 ${isShaking ? 'animate-shake' : ''}`}>
                 {resultStep >= 1 && (
-                  <div className="transition-opacity duration-500">
-                    <p>You chose: {choice}</p>
-                    {message && (
-                      <p className="text-sm text-gray-400">
-                        Your message: "{message}"
-                      </p>
-                    )}
-                  </div>
+                  <p className="transition-opacity duration-500">
+                    You chose: {choice}
+                  </p>
                 )}
                 
                 {resultStep >= 2 && (
-                  <div className="transition-opacity duration-500">
-                    <p>{opponentName} chose: {opponentChoice}</p>
-                    {opponentMessage && (
-                      <p className="text-sm text-gray-400">
-                        {opponentName}'s message: "{opponentMessage}"
-                      </p>
-                    )}
-                  </div>
+                  <p className="transition-opacity duration-500">
+                    {opponentName} chose: {opponentChoice}
+                  </p>
                 )}
                 
                 {resultStep >= 3 && (
-                  <div className="transition-opacity duration-500">
-                    <p className="text-xl font-bold mt-4">{getResult()}</p>
-                    {(message || opponentMessage) && (
-                      <p className="italic mt-2">
-                        Winner's message: "
-                        {getResult() === "You Win!" ? message : opponentMessage}"
-                        <span className="text-sm text-gray-400 ml-2">
-                          - {getResult() === "You Win!" ? name : opponentName}
-                        </span>
-                      </p>
-                    )}
-                  </div>
+                  <p className="text-xl font-bold transition-opacity duration-500">
+                    {getResult()}
+                  </p>
                 )}
                 
+                {resultStep >= 4 && opponentMessage && (
+                  <p className="italic transition-opacity duration-500">
+                    "{opponentMessage}" - {opponentName}
+                  </p>
+                )}
+
                 {resultStep >= 4 && (
                   <button 
                     onClick={resetGame}
@@ -443,3 +437,13 @@ export default function App() {
     </div>
   );
 }
+
+// 添加到你的 tailwind.config.js 或 CSS 文件中
+// @keyframes shake {
+//   0%, 100% { transform: translateX(0); }
+//   25% { transform: translateX(-5px); }
+//   75% { transform: translateX(5px); }
+// }
+// .animate-shake {
+//   animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+// }
