@@ -80,3 +80,43 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* 添加到你的 src/index.css 文件末尾 */
+
+/* Flexbox 居中 */
+.center-flex {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Grid 居中 */
+.center-grid {
+  display: grid;
+  place-items: center;
+}
+
+/* 水平居中 */
+.center-horizontal {
+  margin-left: auto;
+  margin-right: auto;
+  width: fit-content;
+}
+
+/* 垂直居中容器 */
+.center-vertical {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+}
+
+/* 完全居中的容器 */
+.center-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+}
