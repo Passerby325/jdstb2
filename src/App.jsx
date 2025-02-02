@@ -132,357 +132,343 @@ export default function App() {
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 500); // 0.5秒后停止震动
   };
+  // 🎮 选择动作
+const handleChoiceSelection = (selectedChoice) => {
+  if (!hasConfirmed) {
+    setChoice(selectedChoice);
+  }
+};
 
-// 🎮 选择动作
-  const handleChoiceSelection = (selectedChoice) => {
-    if (!hasConfirmed) {
-      setChoice(selectedChoice);
+// 🎮 确认选择
+const handleConfirm = async () => {
+  if (!choice || hasConfirmed) return;
+
+  try {
+    const playerKey = isPlayerA ? "playerA" : "playerB";
+    const playerData = {
+      choice,
+      message,
+      confirmed: true,
+      submittedAt: new Date().toISOString()
+    };
+
+    await update(ref(db, `rooms/${roomCode}/${playerKey}`), playerData);
+    setHasConfirmed(true);
+  } catch (err) {
+    setError("Failed to confirm choice: " + err.message);
+  }
+};
+
+// 🎮 获取游戏结果
+const getResult = () => {
+  if (!opponentChoice) return "Waiting...";
+  if (choice === opponentChoice) return "It's a tie!";
+  if (
+    (choice === "Rock" && opponentChoice === "Scissors") ||
+    (choice === "Paper" && opponentChoice === "Rock") ||
+    (choice === "Scissors" && opponentChoice === "Paper")
+  ) {
+    return "You Win!";
+  }
+  return "You Lose!";
+};
+
+// 🔄 重置游戏并清除房间数据
+const resetGame = async () => {
+  try {
+    if (roomCode) {
+      await remove(ref(db, `rooms/${roomCode}`));
     }
-  };
+  } catch (err) {
+    console.error("Failed to cleanup room:", err);
+  }
 
-  // 🎮 确认选择
-  const handleConfirm = async () => {
-    if (!choice || hasConfirmed) return;
+  setStep("login");
+  setName("");
+  setRoomCode("");
+  setChoice("");
+  setMessage("");
+  setHasConfirmed(false);
+  setOpponentName("");
+  setOpponentChoice(null);
+  setOpponentMessage("");
+  setOpponentConfirmed(false);
+  setGameCountdown(30);
+  setResultCountdown(3);
+  setResultStep(0);
+  setIsShaking(false);
+  setGameStarted(false);
+  setIsPlayerA(false);
+  setError("");
+};
 
-    try {
-      const playerKey = isPlayerA ? "playerA" : "playerB";
-      const playerData = {
-        choice,
-        message,
-        confirmed: true,
-        submittedAt: new Date().toISOString()
-      };
+// 👀 监听房间状态和对手
+useEffect(() => {
+  if (step === "waiting" || step === "game") {
+    const roomRef = ref(db, `rooms/${roomCode}`);
+    const unsubscribe = onValue(roomRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
 
-      await update(ref(db, `rooms/${roomCode}/${playerKey}`), playerData);
-      setHasConfirmed(true);
-    } catch (err) {
-      setError("Failed to confirm choice: " + err.message);
-    }
-  };
-
-  // 🎮 获取游戏结果
-  const getResult = () => {
-    if (!opponentChoice) return "Waiting...";
-    if (choice === opponentChoice) return "It's a tie!";
-    if (
-      (choice === "Rock" && opponentChoice === "Scissors") ||
-      (choice === "Paper" && opponentChoice === "Rock") ||
-      (choice === "Scissors" && opponentChoice === "Paper")
-    ) {
-      return "You Win!";
-    }
-    return "You Lose!";
-  };
-
-  // 🔄 重置游戏并清除房间数据
-  const resetGame = async () => {
-    try {
-      if (roomCode) {
-        await remove(ref(db, `rooms/${roomCode}`)); // 清除房间数据
+      if (step === "waiting" && data.status === "playing") {
+        setOpponentName(data.playerB);
+        setStep("game");
+        setGameCountdown(30);
       }
-    } catch (err) {
-      console.error("Failed to cleanup room:", err);
-    }
 
-    setStep("login");
-    setName("");
-    setRoomCode("");
-    setChoice("");
-    setMessage("");
-    setHasConfirmed(false);
-    setOpponentName("");
-    setOpponentChoice(null);
-    setOpponentMessage("");
-    setOpponentConfirmed(false);
-    setGameCountdown(30);
-    setResultCountdown(3);
-    setResultStep(0);
-    setIsShaking(false);
-    setGameStarted(false);
-    setIsPlayerA(false);
-    setError("");
-  };
+      const opponentKey = isPlayerA ? "playerB" : "playerA";
+      if (data[opponentKey]?.confirmed) {
+        setOpponentConfirmed(true);
+        setOpponentChoice(data[opponentKey].choice);
+        setOpponentMessage(data[opponentKey].message || "");
+      }
+    });
 
-  // 👀 监听房间状态和对手
-  useEffect(() => {
-    if (step === "waiting" || step === "game") {
-      const roomRef = ref(db, `rooms/${roomCode}`);
-      const unsubscribe = onValue(roomRef, (snapshot) => {
-        const data = snapshot.val();
-        if (!data) return;
+    return () => unsubscribe();
+  }
+}, [step, roomCode, isPlayerA]);
 
-        if (step === "waiting" && data.status === "playing") {
-          setOpponentName(data.playerB);
-          setStep("game");
-          setGameCountdown(30);
-        }
-
-        const opponentKey = isPlayerA ? "playerB" : "playerA";
-        if (data[opponentKey]?.confirmed) {
-          setOpponentConfirmed(true);
-          setOpponentChoice(data[opponentKey].choice);
-          setOpponentMessage(data[opponentKey].message || "");
-        }
-      });
-
-      return () => unsubscribe();
-    }
-  }, [step, roomCode, isPlayerA]);
-
-  // ⏳ 游戏选择倒计时
-  useEffect(() => {
-    let timer;
-    if (step === "game" && !gameStarted && gameCountdown > 0) {
-      timer = setInterval(() => {
-        setGameCountdown((prev) => {
-          if (prev <= 1) {
-            if (!hasConfirmed) {
-              handleConfirm();
-            }
-            return 0;
+// ⏳ 游戏选择倒计时
+useEffect(() => {
+  let timer;
+  if (step === "game" && !gameStarted && gameCountdown > 0) {
+    timer = setInterval(() => {
+      setGameCountdown((prev) => {
+        if (prev <= 1) {
+          if (!hasConfirmed) {
+            handleConfirm();
           }
-          return prev - 1;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+  return () => clearInterval(timer);
+}, [step, gameStarted, gameCountdown, hasConfirmed]);
+
+// 🎮 检查游戏是否结束
+useEffect(() => {
+  if (step === "game" && (hasConfirmed && opponentConfirmed || gameCountdown === 0)) {
+    setGameStarted(true);
+    setStep("result");
+    setResultStep(0);
+  }
+}, [hasConfirmed, opponentConfirmed, gameCountdown, step]);
+
+// ⏳ 结果逐步显示效果
+useEffect(() => {
+  let timer;
+  if (step === "result") {
+    if (resultCountdown > 0) {
+      timer = setInterval(() => {
+        setResultCountdown(prev => prev - 1);
+      }, 1000);
+    } else if (resultStep < 4) {
+      timer = setTimeout(() => {
+        setResultStep(prev => {
+          if (prev < 4) {
+            startShaking();
+            return prev + 1;
+          }
+          return prev;
         });
       }, 1000);
     }
-    return () => clearInterval(timer);
-  }, [step, gameStarted, gameCountdown, hasConfirmed]);
+  }
+  return () => {
+    clearInterval(timer);
+    clearTimeout(timer);
+  };
+}, [step, resultCountdown, resultStep]);
 
-  // 🎮 检查游戏是否结束
-  useEffect(() => {
-    if (step === "game" && (hasConfirmed && opponentConfirmed || gameCountdown === 0)) {
-      setGameStarted(true);
-      setStep("result");
-      setResultStep(0);
-    }
-  }, [hasConfirmed, opponentConfirmed, gameCountdown, step]);
+return (
+  <div className="app-container">
+    <div className="max-width-container">
+      <div className="center-column">
+        {error && (
+          <div className="error">
+            {error}
+          </div>
+        )}
 
-  // ⏳ 结果逐步显示效果
-  useEffect(() => {
-    let timer;
-    if (step === "result") {
-      if (resultCountdown > 0) {
-        timer = setInterval(() => {
-          setResultCountdown(prev => prev - 1);
-        }, 1000);
-      } else if (resultStep < 4) {
-        timer = setTimeout(() => {
-          setResultStep(prev => {
-            if (prev < 4) {
-              startShaking();
-              return prev + 1;
-            }
-            return prev;
-          });
-        }, 1000);
-      }
-    }
-    return () => {
-      clearInterval(timer);
-      clearTimeout(timer);
-    };
-  }, [step, resultCountdown, resultStep]);
+        {step === "login" && (
+          <div className="center-column">
+            <h1 className="title">Rock Paper Scissors</h1>
+            <p className="subtitle">
+              Create a room by entering a 4-character room code (numbers or letters). 
+              Others can join your room by entering the same code.
+            </p>
+            <input
+              type="text"
+              placeholder="Your Name"
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+            />
+            <input
+              type="text"
+              placeholder="Room Code (4 characters)"
+              className="input"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              maxLength={4}
+              disabled={loading}
+            />
+            <button 
+              onClick={handleCreateRoom}
+              className={`button button-blue ${loading ? 'disabled' : ''}`}
+              disabled={loading}
+            >
+              {loading ? 'Creating...' : 'Create Room'}
+            </button>
+            <button 
+              onClick={handleJoinRoom}
+              className={`button button-green ${loading ? 'disabled' : ''}`}
+              disabled={loading}
+            >
+              {loading ? 'Joining...' : 'Join Room'}
+            </button>
+          </div>
+        )}
 
-  return (
-   <div className="center-container bg-gray-900 text-white">
-      <div className="w-full max-w-md mx-auto p-6">
-        <div className="w-full flex flex-col items-center justify-center text-center">
-          {error && (
-            <div className="bg-red-500 text-white p-2 rounded mb-4 w-full max-w-sm">
-              {error}
-            </div>
-          )}
+        {step === "waiting" && (
+          <div className="center-column">
+            <h1 className="title">Waiting for opponent...</h1>
+            <p className="room-code">Room Code: {roomCode}</p>
+          </div>
+        )}
 
-          {step === "login" && (
-            <div className="w-full max-w-sm">
-              <h1 className="text-3xl font-bold mb-4">Rock Paper Scissors</h1>
-              <p className="mb-6 text-gray-300">
-                Create a room by entering a 4-character room code (numbers or letters). 
-                Others can join your room by entering the same code.
-              </p>
-              <input
-                type="text"
-                placeholder="Your Name"
-                className="p-2 rounded text-black mb-2 block w-full"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={loading}
-              />
-              <input
-                type="text"
-                placeholder="Room Code (4 characters)"
-                className="p-2 rounded text-black mb-4 block w-full"
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                maxLength={4}
-                disabled={loading}
-              />
-              <button 
-                onClick={handleCreateRoom}
-                className={`bg-blue-500 px-4 py-2 rounded mb-2 w-full ${loading ? 'opacity-50' : ''}`}
-                disabled={loading}
-              >
-                {loading ? 'Creating...' : 'Create Room'}
-              </button>
-              <button 
-                onClick={handleJoinRoom}
-                className={`bg-green-500 px-4 py-2 rounded w-full ${loading ? 'opacity-50' : ''}`}
-                disabled={loading}
-              >
-                {loading ? 'Joining...' : 'Join Room'}
-              </button>
-            </div>
-          )}
-
-          {step === "waiting" && (
-            <div className="w-full max-w-sm">
-              <h1 className="text-2xl font-bold">Waiting for opponent...</h1>
-              <p className="mt-4">Room Code: {roomCode}</p>
-            </div>
-          )}
-
-          {step === "game" && (
-            <div className="w-full max-w-sm">
-              <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
-              <p className="text-gray-300 mb-4">
-                Your message will only be shown if you win or tie the game.
-              </p>
-              <p className="text-lg mb-2">Your opponent: {opponentName}</p>
-              {!gameStarted && (
-                <div className="mb-4 text-yellow-400">
-                  Time remaining: {gameCountdown} seconds
-                </div>
-              )}
-              <div className="flex justify-center gap-4 mb-4">
-                {choices.map((c) => (
-                  <button
-                    key={c}
-                    className={`px-4 py-2 rounded ${
-                      choice === c ? 'bg-green-500' : 'bg-gray-700'
-                    } ${hasConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    onClick={() => handleChoiceSelection(c)}
-                    disabled={hasConfirmed}
-                  >
-                    {c}
-                  </button>
-                ))}
+        {step === "game" && (
+          <div className="center-column">
+            <h1 className="title">Make Your Move</h1>
+            <p className="subtitle">
+              Your message will only be shown if you win or tie the game.
+            </p>
+            <p className="opponent-name">Your opponent: {opponentName}</p>
+            {!gameStarted && (
+              <div className="countdown">
+                Time remaining: {gameCountdown} seconds
               </div>
-              <input
-                type="text"
-                placeholder="Message to opponent"
-                className="p-2 rounded text-black mt-4 block w-full"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                disabled={hasConfirmed}
-              />
-              <button 
-                onClick={handleConfirm}
-                disabled={!choice || hasConfirmed}
-                className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full 
-                  ${(!choice || hasConfirmed) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {hasConfirmed ? 'Waiting for opponent...' : 'Confirm'}
-              </button>
-              
-              {hasConfirmed && !opponentConfirmed && (
-                <p className="mt-2 text-yellow-400">
-                  Waiting for opponent to confirm...
-                </p>
-              )}
-              {opponentConfirmed && !hasConfirmed && (
-                <p className="mt-2 text-yellow-400">
-                  Opponent has made their choice!
-                </p>
-              )}
+            )}
+            <div className="choices-container">
+              {choices.map((c) => (
+                <button
+                  key={c}
+                  className={`button ${
+                    choice === c ? 'button-green' : 'button-gray'
+                  } ${hasConfirmed ? 'disabled' : ''}`}
+                  onClick={() => handleChoiceSelection(c)}
+                  disabled={hasConfirmed}
+                >
+                  {c}
+                </button>
+              ))}
             </div>
-          )}
+            <input
+              type="text"
+              placeholder="Message to opponent"
+              className="input"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              disabled={hasConfirmed}
+            />
+            <button 
+              onClick={handleConfirm}
+              disabled={!choice || hasConfirmed}
+              className={`button button-blue ${(!choice || hasConfirmed) ? 'disabled' : ''}`}
+            >
+              {hasConfirmed ? 'Waiting for opponent...' : 'Confirm'}
+            </button>
+            
+            {hasConfirmed && !opponentConfirmed && (
+              <p className="waiting-message">
+                Waiting for opponent to confirm...
+              </p>
+            )}
+            {opponentConfirmed && !hasConfirmed && (
+              <p className="waiting-message">
+                Opponent has made their choice!
+              </p>
+            )}
+          </div>
+        )}
 
-          {step === "result" && (
-            <div className="w-full max-w-sm">
-              {resultCountdown > 0 ? (
-                <h1 className="text-2xl font-bold mb-4">
-                  Revealing in {resultCountdown}...
-                </h1>
-              ) : (
-                <div className={`space-y-4 ${isShaking ? 'animate-shake' : ''}`}>
-                  <h2 className="text-2xl font-bold underline mb-4">Results:</h2>
-                  
-                  {resultStep >= 1 && (
-                    <p className="transition-opacity duration-500">
-                      <strong>You</strong> chose: {choice}
-                    </p>
-                  )}
-                  
-                  {resultStep >= 2 && (
-                    <p className="transition-opacity duration-500">
-                      <strong>{opponentName}</strong> chose: {opponentChoice}
-                    </p>
-                  )}
-                  
-                  {resultStep >= 3 && (
-                    <p className="text-xl font-bold transition-opacity duration-500">
-                      {getResult()}
-                    </p>
-                  )}
-                  
-                  {resultStep >= 4 && (
-                    <>
-                      {getResult() === "It's a tie!" ? (
-                        // 平局显示两人的消息
-                        <>
-                          {message && (
-                            <p className="italic transition-opacity duration-500">
+        {step === "result" && (
+          <div className="center-column">
+            {resultCountdown > 0 ? (
+              <h1 className="title">
+                Revealing in {resultCountdown}...
+              </h1>
+            ) : (
+              <div className={`result-container ${isShaking ? 'shake' : ''}`}>
+                <h2 className="result-title">Results:</h2>
+                
+                {resultStep >= 1 && (
+                  <p className="fade-in">
+                    <strong>You</strong> chose: {choice}
+                  </p>
+                )}
+                
+                {resultStep >= 2 && (
+                  <p className="fade-in">
+                    <strong>{opponentName}</strong> chose: {opponentChoice}
+                  </p>
+                )}
+                
+                {resultStep >= 3 && (
+                  <p className="result-text fade-in">
+                    {getResult()}
+                  </p>
+                )}
+                
+                {resultStep >= 4 && (
+                  <>
+                    {getResult() === "It's a tie!" ? (
+                      <>
+                        {message && (
+                          <p className="message fade-in">
+                            "{message}" - by <strong>You</strong>
+                          </p>
+                        )}
+                        {opponentMessage && (
+                          <p className="message fade-in">
+                            "{opponentMessage}" - by <strong>{opponentName}</strong>
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {getResult() === "You Win!" ? (
+                          message && (
+                            <p className="message fade-in">
                               "{message}" - by <strong>You</strong>
                             </p>
-                          )}
-                          {opponentMessage && (
-                            <p className="italic transition-opacity duration-500">
+                          )
+                        ) : (
+                          opponentMessage && (
+                            <p className="message fade-in">
                               "{opponentMessage}" - by <strong>{opponentName}</strong>
                             </p>
-                          )}
-                        </>
-                      ) : (
-                        // 胜利者的消息
-                        <>
-                          {getResult() === "You Win!" ? (
-                            message && (
-                              <p className="italic transition-opacity duration-500">
-                                "{message}" - by <strong>You</strong>
-                              </p>
-                            )
-                          ) : (
-                            opponentMessage && (
-                              <p className="italic transition-opacity duration-500">
-                                "{opponentMessage}" - by <strong>{opponentName}</strong>
-                              </p>
-                            )
-                          )}
-                        </>
-                      )}
-                      <button 
-                        onClick={resetGame}
-                        className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
-                      >
-                        Play Again
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                          )
+                        )}
+                      </>
+                    )}
+                    <button 
+                      onClick={resetGame}
+                      className="button button-blue"
+                    >
+                      Play Again
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
+  </div>
+);
 }
-
-// 添加到你的 tailwind.config.js 或 CSS 文件中
-// @keyframes shake {
-//   0%, 100% { transform: translateX(0); }
-//   25% { transform: translateX(-5px); }
-//   75% { transform: translateX(5px); }
-// }
-// .animate-shake {
-//   animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-// }
