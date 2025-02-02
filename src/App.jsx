@@ -1,4 +1,3 @@
-```jsx
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, update, onValue, get, remove } from "firebase/database";
@@ -19,7 +18,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 export default function App() {
-  const [step, setStep] = useState("login"); // "login", "waiting", "game", "result"
+  const [step, setStep] = useState("login");
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [choice, setChoice] = useState("");
@@ -29,26 +28,78 @@ export default function App() {
   const [countdown, setCountdown] = useState(3);
   const [showResult, setShowResult] = useState(false);
   const [resultStep, setResultStep] = useState(0);
+  const [isPlayerA, setIsPlayerA] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const choices = ["Rock", "Paper", "Scissors"];
 
+  // 验证房间代码
+  function validateRoomCode(code) {
+    return code.length === 4;
+  }
+
   // 🕹 创建房间
-  function handleLogin() {
-    if (name && roomCode) {
+  async function handleLogin() {
+    try {
+      if (!name) {
+        setError("Please enter your name");
+        return;
+      }
+      if (!validateRoomCode(roomCode)) {
+        setError("Room code must be 4 characters");
+        return;
+      }
+
+      setLoading(true);
+      setError("");
       const roomRef = ref(db, `rooms/${roomCode}`);
-      remove(roomRef).then(() => {
-        update(roomRef, { playerA: name });
-        setStep("waiting");
+      await remove(roomRef);
+      await update(roomRef, { 
+        playerA: name,
+        createdAt: new Date().toISOString()
       });
+      setIsPlayerA(true);
+      setStep("waiting");
+    } catch (err) {
+      setError("Failed to create room: " + err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
   // 🕹 加入房间
-  function handleJoinRoom() {
-    if (name && roomCode) {
+  async function handleJoinRoom() {
+    try {
+      if (!name) {
+        setError("Please enter your name");
+        return;
+      }
+      if (!validateRoomCode(roomCode)) {
+        setError("Room code must be 4 characters");
+        return;
+      }
+
+      setLoading(true);
+      setError("");
       const roomRef = ref(db, `rooms/${roomCode}`);
-      update(roomRef, { playerB: name });
+      const snapshot = await get(roomRef);
+      
+      if (!snapshot.exists()) {
+        setError("Room not found");
+        return;
+      }
+
+      await update(roomRef, { 
+        playerB: name,
+        joinedAt: new Date().toISOString()
+      });
+      setIsPlayerA(false);
       setStep("game");
+    } catch (err) {
+      setError("Failed to join room: " + err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -56,12 +107,14 @@ export default function App() {
   useEffect(() => {
     if (step === "waiting") {
       const roomRef = ref(db, `rooms/${roomCode}`);
-      onValue(roomRef, (snapshot) => {
+      const unsubscribe = onValue(roomRef, (snapshot) => {
         const data = snapshot.val();
         if (data?.playerA && data?.playerB) {
           setStep("game");
         }
       });
+
+      return () => unsubscribe();
     }
   }, [step, roomCode]);
 
@@ -70,25 +123,60 @@ export default function App() {
     setChoice(choice);
   }
 
-```jsx
   // 🕹 确认选择 & 等待对手
   function handleConfirm() {
-    const playerKey = isPlayerA ? "playerA" : "playerB"; // 确定当前玩家
-    update(ref(db, `rooms/${roomCode}/${playerKey}`), { choice, message });
-
-    // ✅ 监听对手的数据，等待其提交
-    const opponentKey = isPlayerA ? "playerB" : "playerA";
-    const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
-
-    onValue(opponentRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data?.choice) {
-        setOpponentChoice(data.choice);
-        setOpponentMessage(data.message || ""); // 避免 message 为空时报错
-        setStep("result");
-      }
-    });
+    const playerKey = isPlayerA ? "playerA" : "playerB";
+    const playerData = {
+      choice,
+      message,
+      submittedAt: new Date().toISOString()
+    };
+    
+    update(ref(db, `rooms/${roomCode}/${playerKey}`), playerData);
   }
+
+  // 监听对手选择
+  useEffect(() => {
+    if (step === "game") {
+      const opponentKey = isPlayerA ? "playerB" : "playerA";
+      const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
+
+      const unsubscribe = onValue(opponentRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data?.choice) {
+          setOpponentChoice(data.choice);
+          setOpponentMessage(data.message || "");
+          setStep("result");
+        }
+      });
+
+      return () => unsubscribe();
+    }
+  }, [step, roomCode, isPlayerA]);
+
+  // ⏳ 倒计时
+  useEffect(() => {
+    if (step === "result" && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(prev => prev - 1);
+        if (countdown === 1) {
+          setShowResult(true);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, countdown]);
+
+  // 清理房间数据
+  useEffect(() => {
+    if (step === "result" && showResult) {
+      const cleanup = setTimeout(() => {
+        const roomRef = ref(db, `rooms/${roomCode}`);
+        remove(roomRef);
+      }, 5000);
+      return () => clearTimeout(cleanup);
+    }
+  }, [step, showResult, roomCode]);
 
   // 🕹 结果计算
   function getResult() {
@@ -111,30 +199,35 @@ export default function App() {
     return "";
   }
 
-  // ⏳ 倒计时
-  useEffect(() => {
-    if (step === "game") {
-      const opponentKey = isPlayerA ? "playerB" : "playerA";
-      const opponentRef = ref(db, `rooms/${roomCode}/${opponentKey}`);
-
-      onValue(opponentRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data?.choice) {
-          setOpponentChoice(data.choice);
-          setOpponentMessage(data.message || "");
-          setStep("result");
-        }
-      });
-    }
-  }, [step, roomCode, isPlayerA]);
+  // 重置游戏
+  function resetGame() {
+    setStep("login");
+    setName("");
+    setRoomCode("");
+    setChoice("");
+    setMessage("");
+    setOpponentChoice(null);
+    setOpponentMessage("");
+    setCountdown(3);
+    setShowResult(false);
+    setResultStep(0);
+    setIsPlayerA(false);
+    setError("");
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white p-4">
       <div className="max-w-md mx-auto w-full flex flex-col justify-center items-center">
+        {/* 错误提示 */}
+        {error && (
+          <div className="bg-red-500 text-white p-2 rounded mb-4 w-full text-center">
+            {error}
+          </div>
+        )}
         
         {/* 登录页面 */}
         {step === "login" && (
-          <div className="text-center">
+          <div className="text-center w-full">
             <h1 className="text-2xl font-bold mb-4">Enter Game Room</h1>
             <input
               type="text"
@@ -142,6 +235,7 @@ export default function App() {
               className="p-2 rounded text-black mb-2 block w-full"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={loading}
             />
             <input
               type="text"
@@ -149,9 +243,23 @@ export default function App() {
               className="p-2 rounded text-black mb-2 block w-full"
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value)}
+              maxLength={4}
+              disabled={loading}
             />
-            <button onClick={handleLogin} className="bg-blue-500 px-4 py-2 rounded mt-2">Create Room</button>
-            <button onClick={handleJoinRoom} className="bg-green-500 px-4 py-2 rounded mt-2">Join Room</button>
+            <button 
+              onClick={handleLogin} 
+              className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+              disabled={loading}
+            >
+              {loading ? 'Creating...' : 'Create Room'}
+            </button>
+            <button 
+              onClick={handleJoinRoom} 
+              className={`bg-green-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+              disabled={loading}
+            >
+              {loading ? 'Joining...' : 'Join Room'}
+            </button>
           </div>
         )}
 
@@ -167,11 +275,11 @@ export default function App() {
         {step === "game" && (
           <div className="text-center">
             <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
-            <div className="flex justify-center gap-4">
+            <div className="flex justify-center gap-4 mb-4">
               {choices.map((c) => (
                 <button
                   key={c}
-                  className={`px-4 py-2 rounded ${choice === c ? "bg-green-500" : "bg-gray-700"}`}
+                  className={`px-4 py-2 rounded ${choice === c ? 'bg-green-500' : 'bg-gray-700'}`}
                   onClick={() => handleChoiceSelection(c)}
                 >
                   {c}
@@ -185,20 +293,36 @@ export default function App() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
-            <button onClick={handleConfirm} className="bg-blue-500 px-4 py-2 rounded mt-2">Confirm</button>
+            <button 
+              onClick={handleConfirm}
+              disabled={!choice}
+              className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full ${!choice ? 'opacity-50' : ''}`}
+            >
+              Confirm
+            </button>
           </div>
         )}
 
         {/* 结果 */}
         {step === "result" && (
           <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Revealing in {countdown}...</h1>
+            <h1 className="text-2xl font-bold mb-4">
+              {!showResult ? `Revealing in ${countdown}...` : 'Game Result'}
+            </h1>
             {showResult && (
               <>
                 <p>You chose: {choice}</p>
                 <p>Opponent chose: {opponentChoice}</p>
-                <p className="mt-4 font-bold">{getResult()}</p>
-                <p className="italic mt-2">"{getWinnerMessage()}"</p>
+                <p className="mt-4 font-bold text-xl">{getResult()}</p>
+                {getWinnerMessage() && (
+                  <p className="italic mt-2">"{getWinnerMessage()}"</p>
+                )}
+                <button 
+                  onClick={resetGame} 
+                  className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
+                >
+                  Play Again
+                </button>
               </>
             )}
           </div>
