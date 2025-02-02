@@ -269,7 +269,7 @@ export default function App() {
         timer = setTimeout(() => {
           setResultStep(prev => {
             if (prev < 4) {
-              startShaking(); // 添加震动效果
+              startShaking();
               return prev + 1;
             }
             return prev;
@@ -295,7 +295,11 @@ export default function App() {
 
           {step === "login" && (
             <div className="w-full max-w-sm">
-              <h1 className="text-2xl font-bold mb-4">Enter Game Room</h1>
+              <h1 className="text-3xl font-bold mb-4">Rock Paper Scissors</h1>
+              <p className="mb-6 text-gray-300">
+                Create a room by entering a 4-character room code (numbers or letters). 
+                Others can join your room by entering the same code.
+              </p>
               <input
                 type="text"
                 placeholder="Your Name"
@@ -307,7 +311,7 @@ export default function App() {
               <input
                 type="text"
                 placeholder="Room Code (4 characters)"
-                className="p-2 rounded text-black mb-2 block w-full"
+                className="p-2 rounded text-black mb-4 block w-full"
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 maxLength={4}
@@ -315,14 +319,14 @@ export default function App() {
               />
               <button 
                 onClick={handleCreateRoom}
-                className={`bg-blue-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+                className={`bg-blue-500 px-4 py-2 rounded mb-2 w-full ${loading ? 'opacity-50' : ''}`}
                 disabled={loading}
               >
                 {loading ? 'Creating...' : 'Create Room'}
               </button>
               <button 
                 onClick={handleJoinRoom}
-                className={`bg-green-500 px-4 py-2 rounded mt-2 w-full ${loading ? 'opacity-50' : ''}`}
+                className={`bg-green-500 px-4 py-2 rounded w-full ${loading ? 'opacity-50' : ''}`}
                 disabled={loading}
               >
                 {loading ? 'Joining...' : 'Join Room'}
@@ -340,6 +344,9 @@ export default function App() {
           {step === "game" && (
             <div className="w-full max-w-sm">
               <h1 className="text-2xl font-bold mb-4">Make Your Move</h1>
+              <p className="text-gray-300 mb-4">
+                Your message will only be shown if you win or tie the game.
+              </p>
               <p className="text-lg mb-2">Your opponent: {opponentName}</p>
               {!gameStarted && (
                 <div className="mb-4 text-yellow-400">
@@ -398,15 +405,17 @@ export default function App() {
                 </h1>
               ) : (
                 <div className={`space-y-4 ${isShaking ? 'animate-shake' : ''}`}>
+                  <h2 className="text-2xl font-bold underline mb-4">Results:</h2>
+                  
                   {resultStep >= 1 && (
                     <p className="transition-opacity duration-500">
-                      You chose: {choice}
+                      <strong>You</strong> chose: {choice}
                     </p>
                   )}
                   
                   {resultStep >= 2 && (
                     <p className="transition-opacity duration-500">
-                      {opponentName} chose: {opponentChoice}
+                      <strong>{opponentName}</strong> chose: {opponentChoice}
                     </p>
                   )}
                   
@@ -416,19 +425,47 @@ export default function App() {
                     </p>
                   )}
                   
-                  {resultStep >= 4 && opponentMessage && (
-                    <p className="italic transition-opacity duration-500">
-                      "{opponentMessage}" - {opponentName}
-                    </p>
-                  )}
-
                   {resultStep >= 4 && (
-                    <button 
-                      onClick={resetGame}
-                      className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
-                    >
-                      Play Again
-                    </button>
+                    <>
+                      {getResult() === "It's a tie!" ? (
+                        // 平局显示两人的消息
+                        <>
+                          {message && (
+                            <p className="italic transition-opacity duration-500">
+                              "{message}" - by <strong>You</strong>
+                            </p>
+                          )}
+                          {opponentMessage && (
+                            <p className="italic transition-opacity duration-500">
+                              "{opponentMessage}" - by <strong>{opponentName}</strong>
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        // 胜利者的消息
+                        <>
+                          {getResult() === "You Win!" ? (
+                            message && (
+                              <p className="italic transition-opacity duration-500">
+                                "{message}" - by <strong>You</strong>
+                              </p>
+                            )
+                          ) : (
+                            opponentMessage && (
+                              <p className="italic transition-opacity duration-500">
+                                "{opponentMessage}" - by <strong>{opponentName}</strong>
+                              </p>
+                            )
+                          )}
+                        </>
+                      )}
+                      <button 
+                        onClick={resetGame}
+                        className="bg-blue-500 px-4 py-2 rounded mt-4 w-full"
+                      >
+                        Play Again
+                      </button>
+                    </>
                   )}
                 </div>
               )}
